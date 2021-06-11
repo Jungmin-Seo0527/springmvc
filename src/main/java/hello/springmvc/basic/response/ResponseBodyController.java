@@ -25,7 +25,7 @@ public class ResponseBodyController {
     }
 
     @GetMapping("/response-body-string-v2")
-    public ResponseEntity<String> responseBodyV2(HttpServletResponse response) throws IOException {
+    public ResponseEntity<String> responseBodyV2() {
         return new ResponseEntity<>("ok", HttpStatus.OK);
     }
 
