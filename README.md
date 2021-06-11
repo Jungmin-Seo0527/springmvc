@@ -1153,4 +1153,143 @@ public class RequestBodyStringController {
 `@ResponseBody`를 사용하면 응답 결과를 HTTP 메시지 바디에 직접 담아서 전달할 수 있다.    
 물론 이 경우에도 view를 사용하지 않는다.
 
+### 6-10. HTTP 요청 메시지 - JSON
+
+#### RequestBodyJsonController
+
+* `src/main/java/hello/springmvc/basic/request/RequestBodyJsonController.java`
+
+```java
+public class RequestBodyJsonController {
+
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    @PostMapping("/request-body-json-v1")
+    public void requestBodyJsonV1(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        ServletInputStream inputStream = request.getInputStream();
+        String messageBody = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+
+        log.info("messageBody={}", messageBody);
+        HelloData helloData = objectMapper.readValue(messageBody, HelloData.class);
+        log.info("username={}, age={}", helloData.getUsername(), helloData.getAge());
+
+        response.getWriter().write("ok");
+    }
+}
+```
+
+* 서블릿 방식과 유사하다.(원시적...)
+* `HttpServletRequest`를 직접 사용해서 직접 HTTP 메시지 바디에서 데이터를 읽어와서, 문자로 변환한다.
+* 문자로 된 JSON 데이터를 Jackson 라이브러리인 `objectMapper`를 사용해서 자바 객체로 변환한다.
+
+#### requestBodyJsonV2 = @RequestBody 문자 변환
+
+```java
+public class RequestBodyJsonController {
+
+    @ResponseBody
+    @PostMapping("/request-body-json-v2")
+    public String requestBodyJsonV2(@RequestBody String messageBody) throws IOException {
+
+        log.info("messageBody={}", messageBody);
+        HelloData helloData = objectMapper.readValue(messageBody, HelloData.class);
+        log.info("username={}, age={}", helloData.getUsername(), helloData.getAge());
+
+        return "ok";
+    }
+}
+```
+
+* `@RequestBody`
+    * `HttpMessageConverter` 사용 -> `StringHttpMessageConverter`적용
+
+* `@ResponseBody`
+    * 모든 메서드에 `@ResponseBody`적용
+    * 메시지 바디 정보 직접 반환(view 조회x)
+    * `HttpMessageConverter`사용 -> StringHttpMessageConverter 적용
+
+* 이전에 학습했던 `@RequestBody`를 사용해서 HTTP 메시지에 데이터를 꺼내고 messageBody에 저장한다.
+* 문자로 된 JSON 데이터인 `messageBody`를 `objectMapper`를 통해서 자바 객체로 변환한다.
+* 문자로 변환하고 다시 json으로 변환하는 과정이 불편... `@ModelAttribute`처럼 한번에 객체로 변환할 수는 없을까?
+
+#### requestBodyJsonV3 - @RequestBody 객체 변환
+
+```java
+public class RequestBodyJsonController {
+    @ResponseBody
+    @PostMapping("/request-body-json-v3")
+    public String requestBodyJsonV3(@RequestBody HelloData helloData) {
+        log.info("username={}, age={}", helloData.getUsername(), helloData.getAge());
+
+        return "ok";
+    }
+}
+```
+
+* `@RequestBody`객체 파리미터
+    * `@RequestBody HelloData data`
+    * `@RequestBody`에 직접 만든 객체를 지정할 수 있다.
+
+`HttpEntity`, `@RequestBody`를 사용하면 HTTP 메시지 컨버터가 HTTP 메시지 바디의 내용을 우리가 원하는 문자나 객체 등으로 변환해준다.   
+HTTP 메시지 컨버터는 문자 뿐만 아니라 JSON도 객체로 변환해주는데, 우리가 방금 V2에서 했던 작업을 대신 처리해준다.    
+자세한 내용은 뒤에 HTTP 메시지 컨버터에서 다룬다.
+
+* `@RequestBody`는 생략 불가능
+    * `@ModelAttrubute`에서 학습한 내용을 떠올려 보면...
+    * 스프링은 `@ModelAttrubute`, `@RequestParam`해당 생략시 다음과 같은 규칙을 적용한다.
+        * `String`, `int`, `Integet` 같은 단순 타입 = `@RequestParam`
+        * 나머지 = `@ModelAttribute`(argument resolver로 지정해둔 타입 외)
+    * 따라서 이 경우 `HelloData`에 `@RequestBody`를 생략하면 `@ModelAttribute`가 적용되어 버린다.
+        * `HelloData data` -> `@ModelAttrubute HelloData data`
+        * 따라서 생략하면 HTTP 메시지 바디가 아니라 요청 파라미터를 처리하게 된다.
+
+> 주의    
+> HTTP 요청시에 content-type이 application/json인지 꼭! 확인해야 한다. 그래야 JSON을 처리할 수 있는 HTTP 메시지 컨버터가 실행된다.
+
+#### requestBodyJsonV4 - HttpEntity
+
+* 앞서 배운 것과 같이 `HttpEntity`를 사용해도 무방하다.
+
+```java
+public class RequestBodyJsonController {
+    @ResponseBody
+    @PostMapping("/request-body-json-v4")
+    public String requestBodyJsonV4(HttpEntity<HelloData> httpEntity) {
+        HelloData data = httpEntity.getBody();
+        log.info("username={}, age={}", data.getUsername(), data.getAge());
+        return "ok";
+    }
+}
+```
+
+##### requestBodyJsonV5
+
+```java
+public class RequestBodyJsonController {
+
+    /**
+     * @RequestBody 생략 불가능(@ModelAttrubute 가 적용되어 버림)
+     * HttpMessageConverter 사용 -> MappingJackson2HttpMessageConverter (content-type: application/json)
+     *
+     * @RequestBody 적용
+     *    * 메시지 바디 정보 직접 반환(view 조회x)
+     *    * HttpMessageConverter 사용 -> MappingJackson2HttpMessageConverter 적용 (Accept: application/json)
+     */
+    @ResponseBody
+    @PostMapping("/request-body-json-v5")
+    public HelloData requestBodyJsonV5(@RequestBody HelloData data) {
+        log.info("username={}, age={}", data.getUsername(), data.getAge());
+        return data;
+    }
+}
+```
+
+* `@ResponseBody`
+    * 응답의 경우에도 `@ResponseBody`를 사용하면 해당 객체를 HTTP 메시지 바디에 직접 넣어줄 수 있다. 물론 이 경우에도 `HttpEntity`를 사용해도 된다.
+
+* `@RequestBody`요청
+    * JSON 요청 -> HTTP 메시지 컨버터 -> 객체
+* `@ResponseBody`응답
+    * 객체 -> HTTP 메시지 컨버터 -> JSON 응답
+
 ## Note
